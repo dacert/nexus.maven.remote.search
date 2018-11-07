@@ -1,0 +1,313 @@
+/**
+ * Copyright (c) 2018, David Cervantes Pérez
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+package ro.emilianbold.modules.maven.search.remote.options;
+
+import java.io.File;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.prefs.Preferences;
+import okhttp3.Cache;
+import org.openide.DialogDisplayer;
+import org.openide.LifecycleManager;
+import org.openide.NotifyDescriptor;
+import org.openide.awt.NotificationDisplayer;
+import org.openide.modules.Places;
+import org.openide.util.NbPreferences;
+
+public final class NexusMavenRemoteSearchPanel extends javax.swing.JPanel {
+
+    private final NexusMavenRemoteSearchOptionsPanelController controller;
+    private final File cacheFolder = Places.getCacheSubdirectory("nexus.maven.remote.search/indexcache");
+    private final CacheSizeWatcher service;
+    
+    NexusMavenRemoteSearchPanel(NexusMavenRemoteSearchOptionsPanelController controller) {
+        this.controller = controller;
+        initComponents();
+        service = new CacheSizeWatcher(cacheFolder);
+        service.addPropertyChangeListener((evt) -> {
+            if(evt.getNewValue() != null)
+                current_size_field.setText(humanReadableByteCount((Long)evt.getNewValue())); 
+        });
+        
+        Preferences pref = NbPreferences.forModule(NexusMavenRemoteSearchPanel.class);
+        Integer size = pref.getInt("maxSize", -1); 
+        if(size == -1)
+            NbPreferences.forModule(NexusMavenRemoteSearchPanel.class).putInt("maxSize", 100);
+        
+        pref.addPreferenceChangeListener((evt) -> {
+            if (evt.getKey().equals("maxSize")) {
+                NotifyDescriptor dialog = new NotifyDescriptor.Confirmation("To change the size of the cache properly, you need to restart the IDE.\n"
+                        + "Restart now?", "Restart Netbeans",
+                                       NotifyDescriptor.OK_CANCEL_OPTION);
+                if (DialogDisplayer.getDefault().notify(dialog) == NotifyDescriptor.OK_OPTION) {
+                    LifecycleManager.getDefault().saveAll();
+                    LifecycleManager.getDefault().markForRestart();
+                    LifecycleManager.getDefault().exit();
+                }else{
+                    NotificationDisplayer.getDefault().notify("Pending Restart", NotificationDisplayer.Priority.HIGH.getIcon(),
+                            "To change the size of the cache properly, you need to restart the IDE.\nRestart now?",
+                            (e) -> {
+                                LifecycleManager.getDefault().saveAll();
+                                LifecycleManager.getDefault().markForRestart();
+                                LifecycleManager.getDefault().exit();
+                            },
+                            NotificationDisplayer.Priority.HIGH, NotificationDisplayer.Category.WARNING);
+                }
+            }
+        });        
+    }
+    
+    public void startCacheSizeWatcher(){        
+        try {
+            service.start();
+        } catch (Exception e) {
+            Logger.getLogger(CacheSizeWatcher.class.getName()).log(Level.WARNING, e.getMessage()); 
+        }               
+    }
+    
+    public void stopCacheSizeWatcher(){
+        try {
+            service.stop();
+        } catch (Exception e) {
+            Logger.getLogger(CacheSizeWatcher.class.getName()).log(Level.WARNING, e.getMessage()); 
+        }
+    }
+
+    /**
+     * This method is called from within the constructor to initialize the form.
+     * WARNING: Do NOT modify this code. The content of this method is always
+     * regenerated by the Form Editor.
+     */
+    // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
+    private void initComponents() {
+
+        jPanel1 = new javax.swing.JPanel();
+        jLabel2 = new javax.swing.JLabel();
+        max_size_field = new javax.swing.JSpinner();
+        jLabel3 = new javax.swing.JLabel();
+        max_stale_field = new javax.swing.JSpinner();
+        jLabel4 = new javax.swing.JLabel();
+        jLabel5 = new javax.swing.JLabel();
+        clear_cache_button = new javax.swing.JButton();
+        current_size_field = new javax.swing.JTextField();
+        jLabel6 = new javax.swing.JLabel();
+        jPanel2 = new javax.swing.JPanel();
+        jLabel1 = new javax.swing.JLabel();
+        pages_field = new javax.swing.JSpinner();
+
+        setLayout(new javax.swing.BoxLayout(this, javax.swing.BoxLayout.PAGE_AXIS));
+
+        jPanel1.setBorder(javax.swing.BorderFactory.createTitledBorder(org.openide.util.NbBundle.getMessage(NexusMavenRemoteSearchPanel.class, "NexusMavenRemoteSearchPanel.jPanel1.border.title"))); // NOI18N
+
+        org.openide.awt.Mnemonics.setLocalizedText(jLabel2, org.openide.util.NbBundle.getMessage(NexusMavenRemoteSearchPanel.class, "NexusMavenRemoteSearchPanel.jLabel2.text")); // NOI18N
+
+        max_size_field.setModel(new javax.swing.SpinnerNumberModel(100, 50, 500, 10));
+
+        org.openide.awt.Mnemonics.setLocalizedText(jLabel3, org.openide.util.NbBundle.getMessage(NexusMavenRemoteSearchPanel.class, "NexusMavenRemoteSearchPanel.jLabel3.text")); // NOI18N
+
+        max_stale_field.setModel(new javax.swing.SpinnerNumberModel(30, 1, 365, 7));
+
+        org.openide.awt.Mnemonics.setLocalizedText(jLabel4, org.openide.util.NbBundle.getMessage(NexusMavenRemoteSearchPanel.class, "NexusMavenRemoteSearchPanel.jLabel4.text")); // NOI18N
+
+        org.openide.awt.Mnemonics.setLocalizedText(jLabel5, org.openide.util.NbBundle.getMessage(NexusMavenRemoteSearchPanel.class, "NexusMavenRemoteSearchPanel.jLabel5.text")); // NOI18N
+
+        org.openide.awt.Mnemonics.setLocalizedText(clear_cache_button, org.openide.util.NbBundle.getMessage(NexusMavenRemoteSearchPanel.class, "NexusMavenRemoteSearchPanel.clear_cache_button.text")); // NOI18N
+        clear_cache_button.setToolTipText(org.openide.util.NbBundle.getMessage(NexusMavenRemoteSearchPanel.class, "NexusMavenRemoteSearchPanel.clear_cache_button.toolTipText")); // NOI18N
+        clear_cache_button.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                clear_cache_buttonActionPerformed(evt);
+            }
+        });
+
+        current_size_field.setEditable(false);
+        current_size_field.setHorizontalAlignment(javax.swing.JTextField.RIGHT);
+        current_size_field.setText(org.openide.util.NbBundle.getMessage(NexusMavenRemoteSearchPanel.class, "NexusMavenRemoteSearchPanel.current_size_field.text")); // NOI18N
+
+        org.openide.awt.Mnemonics.setLocalizedText(jLabel6, org.openide.util.NbBundle.getMessage(NexusMavenRemoteSearchPanel.class, "NexusMavenRemoteSearchPanel.jLabel6.text")); // NOI18N
+
+        javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
+        jPanel1.setLayout(jPanel1Layout);
+        jPanel1Layout.setHorizontalGroup(
+            jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel1Layout.createSequentialGroup()
+                .addGap(12, 12, 12)
+                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(jPanel1Layout.createSequentialGroup()
+                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addComponent(jLabel3)
+                            .addComponent(jLabel2))
+                        .addGap(27, 27, 27)
+                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addComponent(max_stale_field, javax.swing.GroupLayout.DEFAULT_SIZE, 318, Short.MAX_VALUE)
+                            .addComponent(max_size_field))
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addComponent(jLabel5)
+                            .addComponent(jLabel4)))
+                    .addGroup(jPanel1Layout.createSequentialGroup()
+                        .addComponent(jLabel6)
+                        .addGap(18, 18, 18)
+                        .addComponent(current_size_field)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(clear_cache_button)))
+                .addGap(9, 9, 9))
+        );
+        jPanel1Layout.setVerticalGroup(
+            jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel1Layout.createSequentialGroup()
+                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(jLabel2)
+                    .addComponent(max_size_field, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jLabel4))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(jLabel3)
+                    .addComponent(max_stale_field, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jLabel5))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(jLabel6)
+                    .addComponent(current_size_field, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(clear_cache_button))
+                .addContainerGap(15, Short.MAX_VALUE))
+        );
+
+        add(jPanel1);
+
+        jPanel2.setBorder(javax.swing.BorderFactory.createTitledBorder(org.openide.util.NbBundle.getMessage(NexusMavenRemoteSearchPanel.class, "NexusMavenRemoteSearchPanel.jPanel2.border.title"))); // NOI18N
+
+        org.openide.awt.Mnemonics.setLocalizedText(jLabel1, org.openide.util.NbBundle.getMessage(NexusMavenRemoteSearchPanel.class, "NexusMavenRemoteSearchPanel.jLabel1.text")); // NOI18N
+        jLabel1.setToolTipText(org.openide.util.NbBundle.getMessage(NexusMavenRemoteSearchPanel.class, "NexusMavenRemoteSearchPanel.jLabel1.toolTipText")); // NOI18N
+
+        pages_field.setModel(new javax.swing.SpinnerNumberModel(1, 1, null, 1));
+        pages_field.setPreferredSize(new java.awt.Dimension(63, 26));
+
+        javax.swing.GroupLayout jPanel2Layout = new javax.swing.GroupLayout(jPanel2);
+        jPanel2.setLayout(jPanel2Layout);
+        jPanel2Layout.setHorizontalGroup(
+            jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel2Layout.createSequentialGroup()
+                .addContainerGap()
+                .addComponent(jLabel1)
+                .addGap(31, 31, 31)
+                .addComponent(pages_field, javax.swing.GroupLayout.DEFAULT_SIZE, 376, Short.MAX_VALUE)
+                .addContainerGap())
+        );
+        jPanel2Layout.setVerticalGroup(
+            jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel2Layout.createSequentialGroup()
+                .addContainerGap()
+                .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(jLabel1)
+                    .addComponent(pages_field, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addContainerGap(9, Short.MAX_VALUE))
+        );
+
+        add(jPanel2);
+    }// </editor-fold>//GEN-END:initComponents
+
+    private void clear_cache_buttonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_clear_cache_buttonActionPerformed
+       //reset cache on start
+        Preferences pref = NbPreferences.forModule(NexusMavenRemoteSearchPanel.class);
+        Integer size = pref.getInt("maxSize", 100);
+        
+        NotifyDescriptor dialog = new NotifyDescriptor.Confirmation("Are you sure you want to delete the cache?", "Delete cache",
+                                       NotifyDescriptor.YES_NO_OPTION);
+        if (DialogDisplayer.getDefault().notify(dialog) == NotifyDescriptor.YES_OPTION) {
+            try (Cache cache = new Cache(cacheFolder, size * 1024 * 1204);){
+                cache.evictAll();
+            } catch (Exception e) {
+                Logger.getLogger(CacheSizeWatcher.class.getName()).log(Level.WARNING, e.getMessage()); 
+            }finally{
+                current_size_field.setText(humanReadableByteCount(getCacheSize(cacheFolder)));
+            }
+        }
+    }//GEN-LAST:event_clear_cache_buttonActionPerformed
+
+    void load() {
+        // or for org.openide.util with API spec. version >= 7.4:
+        Preferences pref = NbPreferences.forModule(NexusMavenRemoteSearchPanel.class);        
+        max_size_field.setValue(pref.getInt("maxSize", 100));   
+        max_stale_field.setValue(pref.getInt("maxStale", 30));   
+        pages_field.setValue(pref.getInt("pages", 1));
+        current_size_field.setText(humanReadableByteCount(getCacheSize(cacheFolder)));   
+        
+        startCacheSizeWatcher();
+    }
+
+    void store() {
+        // or for org.openide.util with API spec. version >= 7.4:
+        NbPreferences.forModule(NexusMavenRemoteSearchPanel.class).putInt("maxSize", (Integer)max_size_field.getValue());
+        NbPreferences.forModule(NexusMavenRemoteSearchPanel.class).putInt("maxStale", (Integer)max_stale_field.getValue());
+        NbPreferences.forModule(NexusMavenRemoteSearchPanel.class).putInt("pages", (Integer)pages_field.getValue());
+        
+        stopCacheSizeWatcher();
+    }
+
+    boolean valid() {
+        // TODO check whether form is consistent and complete
+        return true;
+    }
+    
+    public static long getCacheSize(File cacheDir){
+        long size = 0;
+        try {
+            for (File file : cacheDir.listFiles((pathname) -> {
+                    return !pathname.getName().equals("journal");
+                })) {
+                    size += file.length();
+            }
+        } catch (Exception e) {
+            Logger.getLogger(CacheSizeWatcher.class.getName()).log(Level.WARNING, e.getMessage()); 
+        }        
+        return size;
+    }
+    
+    private static String humanReadableByteCount(long bytes) {
+        int unit = 1000;
+        if (bytes < unit) 
+            return bytes + " B";
+        int exp = (int) (Math.log(bytes) / Math.log(unit));
+        return String.format("%.1f %sB", bytes / Math.pow(unit, exp), "kMGTPE".charAt(exp-1));
+    }
+
+    // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JButton clear_cache_button;
+    private javax.swing.JTextField current_size_field;
+    private javax.swing.JLabel jLabel1;
+    private javax.swing.JLabel jLabel2;
+    private javax.swing.JLabel jLabel3;
+    private javax.swing.JLabel jLabel4;
+    private javax.swing.JLabel jLabel5;
+    private javax.swing.JLabel jLabel6;
+    private javax.swing.JPanel jPanel1;
+    private javax.swing.JPanel jPanel2;
+    private javax.swing.JSpinner max_size_field;
+    private javax.swing.JSpinner max_stale_field;
+    private javax.swing.JSpinner pages_field;
+    // End of variables declaration//GEN-END:variables
+}
