@@ -42,6 +42,7 @@ import static java.nio.file.StandardWatchEventKinds.ENTRY_CREATE;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_DELETE;
 import static java.nio.file.StandardWatchEventKinds.OVERFLOW;
 import org.openide.util.RequestProcessor;
+import ro.emilianbold.modules.maven.search.remote.Utils;
 
 /**
  *
@@ -69,7 +70,7 @@ public class CacheSizeWatcher implements Runnable{
     }
             
     private void watchDir() {
-        Long size = NexusMavenRemoteSearchPanel.getCacheSize(cacheDir);                
+        Long size = Utils.getCacheSize(cacheDir);                
         try(WatchService watcher = FileSystems.getDefault().newWatchService();) {
             Path path = Paths.get(cacheDir.getAbsolutePath());
             path.register(watcher, ENTRY_CREATE, ENTRY_DELETE);
@@ -84,7 +85,7 @@ public class CacheSizeWatcher implements Runnable{
                     if(event.kind() == OVERFLOW)
                         continue;
                     else{
-                        Long newSize = NexusMavenRemoteSearchPanel.getCacheSize(cacheDir);
+                        Long newSize = Utils.getCacheSize(cacheDir);
                         pcs.firePropertyChange(SIZE_CHANGED, size, newSize);
                         size = newSize;                            
                     }

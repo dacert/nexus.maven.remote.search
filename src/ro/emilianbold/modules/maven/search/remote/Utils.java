@@ -52,11 +52,17 @@
  */
 package ro.emilianbold.modules.maven.search.remote;
 
+import java.io.File;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.netbeans.modules.maven.indexer.api.NBVersionInfo;
 import org.netbeans.modules.maven.indexer.api.RepositoryInfo;
 import org.netbeans.modules.maven.indexer.spi.ResultImplementation;
+import ro.emilianbold.modules.maven.search.remote.options.CacheSizeWatcher;
 
 public class Utils {
 
@@ -65,18 +71,18 @@ public class Utils {
     }
 
     public static ResultImplementation<String> emptyString() {
-	return create(new LinkedList<String>());
+	return create(new LinkedList<String>(), false);
     }
 
     public static ResultImplementation<NBVersionInfo> emptyResult() {
-	return create(new LinkedList<NBVersionInfo>());
+	return create(new LinkedList<NBVersionInfo>(), false);
     }
 
-    public static <T> ResultImplementation<T> create(final List<T> contents) {
+    public static <T> ResultImplementation<T> create(final List<T> contents, boolean partial) {
 	return new ResultImplementation<T>() {
 	    @Override
 	    public boolean isPartial() {
-		return false;
+		return partial;
 	    }
 
 	    @Override
@@ -99,5 +105,37 @@ public class Utils {
 		return getResults().size();
 	    }
 	};
+    }
+    
+    public static String encode(String s) {
+	try {
+	    return URLEncoder.encode(s, "UTF-8");
+	} catch (UnsupportedEncodingException ex) {
+	    //UTF-8 should always(?) be a supported encoding
+	    Logger.getLogger(NexusMavenGenericFindQuery.class.getName()).log(Level.SEVERE, null, ex);
+	    return "";
+	}
+    }
+    
+    public static long getCacheSize(File cacheDir){
+        long size = 0;
+        try {
+            for (File file : cacheDir.listFiles((pathname) -> {
+                    return !pathname.getName().equals("journal");
+                })) {
+                    size += file.length();
+            }
+        } catch (Exception e) {
+            Logger.getLogger(CacheSizeWatcher.class.getName()).log(Level.WARNING, e.getMessage()); 
+        }        
+        return size;
+    }
+    
+    public static String humanReadableByteCount(long bytes) {
+        int unit = 1000;
+        if (bytes < unit) 
+            return bytes + " B";
+        int exp = (int) (Math.log(bytes) / Math.log(unit));
+        return String.format("%.1f %sB", bytes / Math.pow(unit, exp), "kMGTPE".charAt(exp-1));
     }
 }

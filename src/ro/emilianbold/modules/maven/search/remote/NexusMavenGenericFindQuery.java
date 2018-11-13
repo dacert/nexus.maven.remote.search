@@ -55,10 +55,8 @@ package ro.emilianbold.modules.maven.search.remote;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -91,28 +89,26 @@ class NexusMavenGenericFindQuery implements GenericFindQuery {
     //"ec":["-sources.jar","-javadoc.jar",".jar",".pom"]
     static final Pattern CLASSIFIER_PATTERN = Pattern.compile("^(-([^\\.]+))*\\.(.*)$");
     
-    private final OkHttpClient api_client;
-    private final OkHttpClient index_client;
-    
+    private final OkHttpClient client;    
     private final AtomicBoolean cancel = new AtomicBoolean(false);
     private final int maxStale;
     private final int pages;
+    protected final QuerryManager manager;
     
-    public NexusMavenGenericFindQuery(OkHttpClient api_client, OkHttpClient index_client) {
-        this.api_client = api_client;
-        this.index_client = index_client;
+    public NexusMavenGenericFindQuery(OkHttpClient client, QuerryManager manager) {
+        this.client = client;
+        this.manager = manager;
         
         Preferences pref = NbPreferences.forModule(NexusMavenRemoteSearchPanel.class);
         maxStale = pref.getInt("maxStale", 30);
-        pages = pref.getInt("pages", 1); 
+        pages = pref.getInt("pages", 1);         
     }
     
-    public ResultImplementation<NBVersionInfo> find(List<QueryField> fields, final String base, final String repo){
+    protected ResultImplementation<NBVersionInfo> find(List<QueryField> fields, final String base, final String repo){
         QueryField nameField = null;
 	QueryField groupField = null;
 	QueryField artifactField = null;
 	QueryField versionField = null;
-        QueryField packagingField = null;
         
 	for (QueryField field : fields) {            
 	    if (QueryField.FIELD_NAME.equals(field.getField())) {
@@ -127,54 +123,34 @@ class NexusMavenGenericFindQuery implements GenericFindQuery {
 	    if (QueryField.FIELD_VERSION.equals(field.getField())) {
 		versionField = field;
 	    }
-            if (QueryField.FIELD_PACKAGING.equals(field.getField())) {
-		packagingField = field;
-	    }
 	}
         
         //See https://help.sonatype.com/repomanager3/rest-and-integration-api/search-api        
 	if (nameField != null) {
-            String mavenSearchURLText = String.format("%s/service/rest/v1/search?repository=%s&name.raw=%s", base, repo, encode(nameField.getValue()));
-	    final List<NBVersionInfo> results = queryCentralRepository(mavenSearchURLText, repo, null, pages);
-	    return Utils.create(results);
+            String mavenSearchURLText = String.format("%s/service/rest/v1/search?repository=%s&name.raw=%s", base, repo, Utils.encode(nameField.getValue()));
+	    return queryCentralRepository(mavenSearchURLText, repo, null, pages);
 	} 
         
-        if (packagingField != null) {
-            String mavenSearchURLText = String.format("%s/service/rest/v1/search?repository=%s", base, repo);           
-	    final List<NBVersionInfo> results = queryCentralRepository(mavenSearchURLText, repo, packagingField.getValue(), -1);
-	    return Utils.create(results);
-	} 
-        
-        if (groupField != null && groupField.getValue().equals(NexusMavenOnlineRepositoryIndexQueryProvider.GET_ALL_GROUPS)) {
-	    String mavenSearchURLText = String.format("%s/service/rest/v1/search?repository=%s", base, repo);  
-            final List<NBVersionInfo> results = queryCentralRepository(mavenSearchURLText, repo, null, -1);
-	    return Utils.create(results);
-	}
-
 	if (groupField != null || artifactField != null || versionField != null) {
 	    String mavenSearchURLText = String.format("%s/service/rest/v1/search?repository=%s", base, repo);
 	    if (groupField != null) {
-                mavenSearchURLText = String.format("%s&attributes.maven2.groupId=%s", mavenSearchURLText, encode(groupField.getValue()));
+                mavenSearchURLText = String.format("%s&attributes.maven2.groupId=%s", mavenSearchURLText, Utils.encode(groupField.getValue()));
 	    }
 	    if (artifactField != null) {
-                mavenSearchURLText = String.format("%s&attributes.maven2.artifactId=%s", mavenSearchURLText, encode(artifactField.getValue()));		
+                mavenSearchURLText = String.format("%s&attributes.maven2.artifactId=%s", mavenSearchURLText, Utils.encode(artifactField.getValue()));		
 	    }
 	    if (versionField != null) {
-		mavenSearchURLText = String.format("%s&version=%s", mavenSearchURLText, encode(versionField.getValue()));
+		mavenSearchURLText = String.format("%s&version=%s", mavenSearchURLText, Utils.encode(versionField.getValue()));
 	    }
             
-	    final List<NBVersionInfo> results = queryCentralRepository(mavenSearchURLText, repo, null, pages);
-	    return Utils.create(results);
+	    return queryCentralRepository(mavenSearchURLText, repo, null, pages);
 	}
         return Utils.emptyResult();
     }
 
     @Override
     public ResultImplementation<NBVersionInfo> find(List<QueryField> fields, final List<RepositoryInfo> repos) {        
-	
-        for (RepositoryInfo repo : repos) {
-            if(cancel.get())
-                break;
+        for (RepositoryInfo repo : repos) {            
             try {
                 URL url = new URL(repo.getRepositoryUrl());
                 String base = String.format("%s://%s", url.getProtocol(),url.getAuthority());
@@ -182,7 +158,7 @@ class NexusMavenGenericFindQuery implements GenericFindQuery {
                 Matcher matcher = REPOSITORY_PATTERN.matcher(path);
                 if (matcher.matches() && matcher.group(1) != null) {                    
                     ResultImplementation<NBVersionInfo> result = find(fields, base, matcher.group(1));
-                    if(result.getTotalResultCount() > 0)
+                    if(result.getTotalResultCount() > 0 || cancel.get())
                         return result;
                 }                
             } catch (MalformedURLException ex) {
@@ -198,48 +174,47 @@ class NexusMavenGenericFindQuery implements GenericFindQuery {
 	"query.url=Querying Nexus Maven: {0}",
 	"query.parsing=Querying Nexus Maven: parsing results"
     })
-    private List<NBVersionInfo> queryCentralRepository(String mavenSearchURLText, String repo, String filterExtension, int pages) {       
-        final ProgressHandle ph = ProgressHandle.createHandle(Bundle.query_url(mavenSearchURLText), () -> {
-            cancel.set(true);
+    protected ResultImplementation<NBVersionInfo> queryCentralRepository(String mavenSearchURLText, String repo, String filterExtension, int pages) {       
+        final AtomicBoolean partial = new AtomicBoolean(false);
+        final ProgressHandle ph = ProgressHandle.createHandle(Bundle.query_url(mavenSearchURLText), () -> {            
+            partial.set(true);
+            cancel.set(true);      
             return true;
         });
+        manager.addQuerry(mavenSearchURLText, ph.hashCode());
         
         ph.start(); 
         String continuationToken = null;
         int loop = pages;
-        List<NBVersionInfo> infos = new LinkedList<>();
+        final List<NBVersionInfo> infos = new LinkedList<>();
         
         do {
-            try {
+            try {                
                 String url = continuationToken !=null
                         ? String.format("%s&continuationToken=%s", mavenSearchURLText, continuationToken)
                         : mavenSearchURLText;
                 
                 URL u = new URL(url);
-                Request okRequest = new Request.Builder()
-                        .url(u)
-                        .cacheControl(new CacheControl.Builder()
-                                .maxStale(pages == -1 ? maxStale : 5, 
-                                        pages == -1 ? TimeUnit.DAYS : TimeUnit.MINUTES)
-                                .build())
-                        .build();
+                Request okRequest = getRequest(u, pages == -1 ? maxStale : 5, 
+                                        pages == -1 ? TimeUnit.DAYS : TimeUnit.MINUTES,
+                                        ph.hashCode());
                 
-                Response okResponse;
-                if(pages == -1)                    
-                    okResponse = index_client.newCall(okRequest).execute();
-                else
-                    okResponse = api_client.newCall(okRequest).execute();
+                Response okResponse = client.newCall(okRequest).execute();
                 
                 try (InputStream in = okResponse.body().byteStream()) {
                     ph.progress(Bundle.query_parsing());
                     Object parse = JSONValue.parse(new BufferedReader(new InputStreamReader(in)));
                     if (!(parse instanceof JSONObject)) {
-                        return new LinkedList<NBVersionInfo>();
+                        if(!infos.isEmpty())
+                            partial.set(true); 
+                        break;
                     }
                     JSONObject searchJSON = (JSONObject) parse;
                     Object responseObj = searchJSON.get("items");
                     if (!(responseObj instanceof JSONArray)) {
-                        return new LinkedList<NBVersionInfo>();
+                        if(!infos.isEmpty())
+                            partial.set(true); 
+                        break;
                     }
                     JSONArray items = (JSONArray) responseObj;
                     
@@ -263,7 +238,17 @@ class NexusMavenGenericFindQuery implements GenericFindQuery {
         } while ((loop > 0 || loop == -1) && continuationToken != null && !cancel.get());
         
         ph.finish();
-        return infos;
+        manager.removeQuerry(mavenSearchURLText);
+        return Utils.create(infos, partial.get());
+    }
+    
+    protected Request getRequest(URL url, int maxStale, TimeUnit timeUnit, int progressHash){
+        return new Request.Builder()
+                    .url(url)
+                    .cacheControl(new CacheControl.Builder()
+                            .maxStale(maxStale, timeUnit)
+                            .build())
+                    .build();
     }
 
     private List<NBVersionInfo> jsonToInfo(JSONObject item, String repo, String filterExtension) {
@@ -313,13 +298,5 @@ class NexusMavenGenericFindQuery implements GenericFindQuery {
 	return infos;
     }
 
-    private static String encode(String s) {
-	try {
-	    return URLEncoder.encode(s, "UTF-8"); //NOI18N
-	} catch (UnsupportedEncodingException ex) {
-	    //UTF-8 should always(?) be a supported encoding
-	    Logger.getLogger(NexusMavenGenericFindQuery.class.getName()).log(Level.SEVERE, null, ex);
-	    return ""; //NOI18N
-	}
-    }
+    
 }

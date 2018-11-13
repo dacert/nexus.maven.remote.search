@@ -56,8 +56,10 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 import okhttp3.Cache;
@@ -82,19 +84,19 @@ import org.openide.util.lookup.ServiceProvider;
 import ro.emilianbold.modules.maven.search.remote.options.NexusMavenRemoteSearchPanel;
 
 @ServiceProvider(service = RepositoryIndexQueryProvider.class, position = 100)
-public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryIndexQueryProvider {
+public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryIndexQueryProvider, QuerryManager {
 
     private final static int CONNECTION_TIMEOUT = 10 * 1000; //NOI18N
     private final static int READ_TIMEOUT = 10 * 1000; //NOI18N
-    public final static int CACHE_SIZE_MB = 50 * 1024 * 1024;  //NOI18N
-    
-    public final static String GET_ALL_GROUPS = String.format("%d","GET_ALL_GROUPS".hashCode());
+    public final static int CACHE_SIZE_MB = 50 * 1024 * 1024;  //NOI18N    
     
     private final OkHttpClient client;
     private final OkHttpClient index_client;
+    
+    private final LinkedHashMap<String, Integer> queryMap = new LinkedHashMap<>();
 
     public NexusMavenOnlineRepositoryIndexQueryProvider() {
-        File cacheFolder = Places.getCacheSubdirectory("nexus.maven.remote.search/okhttpcache"); //NOI18N
+        File cacheFolder = Places.getCacheSubdirectory("nexus.maven.remote.search/okhttpcache"); //NOI18N   
         File index_cacheFolder = Places.getCacheSubdirectory("nexus.maven.remote.search/indexcache"); //NOI18N 
         
         Cache cache = new Cache(cacheFolder, CACHE_SIZE_MB);
@@ -108,8 +110,8 @@ public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryI
                 .connectTimeout(CONNECTION_TIMEOUT, TimeUnit.MILLISECONDS)
                 .readTimeout(READ_TIMEOUT, TimeUnit.MILLISECONDS)
                 .cache(cache)
-                .build();
-        
+                .build();   
+                
         Preferences pref = NbPreferences.forModule(NexusMavenRemoteSearchPanel.class);        
         Integer size = pref.getInt("maxSize", 100);
         index_client = new OkHttpClient.Builder()
@@ -127,9 +129,12 @@ public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryI
     }
 
     @Override
-    public GenericFindQuery getGenericFindQuery() {
-        
-        return new NexusMavenGenericFindQuery(client, index_client);
+    public GenericFindQuery getGenericFindQuery() {        
+        return new NexusMavenGenericFindQuery(client, this);
+    }
+    
+    public GenericFindQuery getGroupsFindQuery() {   
+        return new NexusMavenFindAllQuery(index_client, this);       
     }
 
     @Override
@@ -138,13 +143,12 @@ public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryI
 	    @Override
 	    public ResultImplementation<NBVersionInfo> getRecords(String groupId, String artifactId, String version, List<RepositoryInfo> repos) {
 		List<QueryField> query = new ArrayList<>();
-		if (groupId != null && !groupId.isEmpty() || (groupId != null &&
-                        artifactId == null && version == null)) {
+		if (groupId != null && !groupId.isEmpty()) {
 		    QueryField qf = new QueryField();
 		    qf.setField(QueryField.FIELD_GROUPID);
 		    qf.setValue(groupId);
 
-		    query.add(qf);
+		    query.add(qf);                    
 		}
 		if (artifactId != null && !artifactId.isEmpty()) {
 		    QueryField qf = new QueryField();
@@ -170,7 +174,10 @@ public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryI
 
 	    @Override
 	    public ResultImplementation<String> getGroups(List<RepositoryInfo> repos) {
-		ResultImplementation<NBVersionInfo> records = getRecords(GET_ALL_GROUPS, null, null, repos);
+		QueryField qf = new QueryField();
+		qf.setField(QueryField.FIELD_GROUPID);
+
+		ResultImplementation<NBVersionInfo> records = getGroupsFindQuery().find(Collections.singletonList(qf), repos);
 
 		List<String> groups = records.getResults()
 			.stream()
@@ -178,7 +185,7 @@ public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryI
 			.distinct()
 			.collect(Collectors.toList());
 
-		return Utils.create(groups);
+		return Utils.create(groups, records.isPartial());
 	    }
 
 	    @Override
@@ -191,7 +198,7 @@ public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryI
 			.distinct()
 			.collect(Collectors.toList());
 
-		return Utils.create(artifacts);
+		return Utils.create(artifacts, records.isPartial());
 	    }
 
 	    @Override
@@ -203,7 +210,7 @@ public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryI
 			.filter(s -> s.startsWith(prefix))
 			.distinct()
 			.collect(Collectors.toList());
-		return Utils.create(filtered);
+		return Utils.create(filtered, groups.isPartial());
 	    }
 
 	    @Override
@@ -214,7 +221,7 @@ public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryI
 			.stream()
 			.filter(s -> s.startsWith(prefix))
 			.collect(Collectors.toList());
-		return Utils.create(filtered);
+		return Utils.create(filtered, artifacts.isPartial());
 	    }
 
 	    @Override
@@ -223,15 +230,15 @@ public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryI
 		qf.setField(QueryField.FIELD_PACKAGING);
 		qf.setValue(packaging);
 
-		ResultImplementation<NBVersionInfo> results = getGenericFindQuery().find(Collections.singletonList(qf), repos);
+		ResultImplementation<NBVersionInfo> records = getGroupsFindQuery().find(Collections.singletonList(qf), repos);
 
-		List<String> gavs = results.getResults()
+		List<String> gavs = records.getResults()
 			.stream()
 			.map((NBVersionInfo info) -> info.getGroupId() + ":" + info.getArtifactId() + ":" + info.getVersion()) //NOI18N
 			.distinct()
 			.collect(Collectors.toList());
 
-		return Utils.create(gavs);
+		return Utils.create(gavs, records.isPartial());
 	    }
 	};
     }
@@ -253,7 +260,41 @@ public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryI
 
     @Override
     public ClassesQuery getClassesQuery() {
-	return null;
+	return new ClassesQuery() {
+            @Override
+            public ResultImplementation<NBVersionInfo> findVersionsByClass(final String string, List<RepositoryInfo> repos) {                
+                QueryField qf = new QueryField();
+		qf.setField(QueryField.FIELD_GROUPID);
+
+		ResultImplementation<NBVersionInfo> records = getGroupsFindQuery().find(Collections.singletonList(qf), repos);
+                
+                AtomicInteger maxOccur = new AtomicInteger(0);
+                List<QueryResultItem> pre_filter = records.getResults()
+			.stream()
+                        .distinct()
+                        .map((NBVersionInfo info) -> new QueryResultItem(info))
+			.filter((QueryResultItem qr) -> {   
+                                int occur = 0;
+                                String class_name = String.join(".",string.split("(?<!(^|[A-Z]))(?=[A-Z])|(?<!^)(?=[A-Z][a-z])"));
+                                String[] parts = class_name.replace("..", ".").split("[.]|[-]|[_]");
+                                for (String part : parts) {
+                                    if(qr.getInfo().getGroupId().contains(part) || qr.getInfo().getArtifactId().contains(part))
+                                        occur++;
+                                }
+                                qr.setOccur(occur);
+                                maxOccur.set(maxOccur.get() < occur ? occur : maxOccur.get());
+                                return occur > 0;
+                            })                        
+                        .collect(Collectors.toList());
+                
+                List<NBVersionInfo> filtered = pre_filter.stream()
+                        .filter((QueryResultItem qr) -> qr.getOccur() == maxOccur.get() )
+                        .map((QueryResultItem qr) ->  qr.getInfo())
+                        .collect(Collectors.toList());
+
+		return Utils.create(filtered, records.isPartial());
+            }
+        };
     }
 
     @Override
@@ -264,5 +305,21 @@ public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryI
     @Override
     public DependencyInfoQueries getDependencyInfoQueries() {
 	return null;
+    }
+
+    @Override
+    public void addQuerry(String url, int handle) {
+        if(!queryMap.containsKey(url))
+            queryMap.put(url, handle);
+}
+
+    @Override
+    public void removeQuerry(String url) {
+        queryMap.remove(url);
+    }
+
+    @Override
+    public boolean hasQuerry(String url, int handle) {
+        return queryMap.containsKey(url) && queryMap.get(url) != handle;
     }
 }

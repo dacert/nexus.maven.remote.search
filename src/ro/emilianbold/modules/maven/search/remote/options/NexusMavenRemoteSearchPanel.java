@@ -37,6 +37,7 @@ import org.openide.NotifyDescriptor;
 import org.openide.awt.NotificationDisplayer;
 import org.openide.modules.Places;
 import org.openide.util.NbPreferences;
+import ro.emilianbold.modules.maven.search.remote.Utils;
 
 public final class NexusMavenRemoteSearchPanel extends javax.swing.JPanel {
 
@@ -50,7 +51,7 @@ public final class NexusMavenRemoteSearchPanel extends javax.swing.JPanel {
         service = new CacheSizeWatcher(cacheFolder);
         service.addPropertyChangeListener((evt) -> {
             if(evt.getNewValue() != null)
-                current_size_field.setText(humanReadableByteCount((Long)evt.getNewValue())); 
+                current_size_field.setText(Utils.humanReadableByteCount((Long)evt.getNewValue())); 
         });
         
         Preferences pref = NbPreferences.forModule(NexusMavenRemoteSearchPanel.class);
@@ -243,7 +244,7 @@ public final class NexusMavenRemoteSearchPanel extends javax.swing.JPanel {
             } catch (Exception e) {
                 Logger.getLogger(CacheSizeWatcher.class.getName()).log(Level.WARNING, e.getMessage()); 
             }finally{
-                current_size_field.setText(humanReadableByteCount(getCacheSize(cacheFolder)));
+                current_size_field.setText(Utils.humanReadableByteCount(Utils.getCacheSize(cacheFolder)));
             }
         }
     }//GEN-LAST:event_clear_cache_buttonActionPerformed
@@ -254,7 +255,7 @@ public final class NexusMavenRemoteSearchPanel extends javax.swing.JPanel {
         max_size_field.setValue(pref.getInt("maxSize", 100));   
         max_stale_field.setValue(pref.getInt("maxStale", 30));   
         pages_field.setValue(pref.getInt("pages", 1));
-        current_size_field.setText(humanReadableByteCount(getCacheSize(cacheFolder)));   
+        current_size_field.setText(Utils.humanReadableByteCount(Utils.getCacheSize(cacheFolder)));   
         
         startCacheSizeWatcher();
     }
@@ -271,28 +272,6 @@ public final class NexusMavenRemoteSearchPanel extends javax.swing.JPanel {
     boolean valid() {
         // TODO check whether form is consistent and complete
         return true;
-    }
-    
-    public static long getCacheSize(File cacheDir){
-        long size = 0;
-        try {
-            for (File file : cacheDir.listFiles((pathname) -> {
-                    return !pathname.getName().equals("journal");
-                })) {
-                    size += file.length();
-            }
-        } catch (Exception e) {
-            Logger.getLogger(CacheSizeWatcher.class.getName()).log(Level.WARNING, e.getMessage()); 
-        }        
-        return size;
-    }
-    
-    private static String humanReadableByteCount(long bytes) {
-        int unit = 1000;
-        if (bytes < unit) 
-            return bytes + " B";
-        int exp = (int) (Math.log(bytes) / Math.log(unit));
-        return String.format("%.1f %sB", bytes / Math.pow(unit, exp), "kMGTPE".charAt(exp-1));
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
