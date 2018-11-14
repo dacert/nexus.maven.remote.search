@@ -15,9 +15,10 @@ Tools > Options > Java > Nexus Maven Remote Search
 
 
 ## [2.0]
- -The searches are made in the repos that you have configured and not fixed to the "central" as previously
- -The api is used (NXRM) 3 instead of the (NXRM) 2
- -Allows to cancel the search if this delay, returning the results found so far.
- -Resume of the canceled searches (internal behavior via cache).
- -Configuration of cache max size, max stale and pagination.
- -Allow to clear the cache.
+- The searches are made in the repos that you have configured and not fixed to the "central" as previously.
+- The api is used (NXRM) 3 instead of the (NXRM) 2.
+- Allows to cancel the search if this delay, returning the results found so far.
+- Resume of the canceled searches (internal behavior via cache).
+- Configuration of cache max size, max stale and pagination.
+- Allow to clear the cache.
+- Allow an approximation of class search.
