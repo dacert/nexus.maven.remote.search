@@ -263,10 +263,18 @@ public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryI
 	return new ClassesQuery() {
             @Override
             public ResultImplementation<NBVersionInfo> findVersionsByClass(final String string, List<RepositoryInfo> repos) {                
+                final String class_name = String.join(".",string.split("(?<!(^|[A-Z]))(?=[A-Z])|(?<!^)(?=[A-Z][a-z])")).replace("..", ".");
+                                
                 QueryField qf = new QueryField();
-		qf.setField(QueryField.FIELD_GROUPID);
-
-		ResultImplementation<NBVersionInfo> records = getGroupsFindQuery().find(Collections.singletonList(qf), repos);
+                qf.setField(QueryField.FIELD_NAME); 
+                
+                qf.setValue(class_name.replace(" ","[.]|[-]|[_]"));
+                ResultImplementation<NBVersionInfo> records = getGenericFindQuery().find(Collections.singletonList(qf), repos);
+                
+		if(records.getReturnedResultCount() == 0){
+                    qf.setField(QueryField.FIELD_GROUPID);                
+                    records = getGroupsFindQuery().find(Collections.singletonList(qf), repos);                
+                }
                 
                 AtomicInteger maxOccur = new AtomicInteger(0);
                 List<QueryResultItem> pre_filter = records.getResults()
@@ -275,8 +283,7 @@ public class NexusMavenOnlineRepositoryIndexQueryProvider implements RepositoryI
                         .map((NBVersionInfo info) -> new QueryResultItem(info))
 			.filter((QueryResultItem qr) -> {   
                                 int occur = 0;
-                                String class_name = String.join(".",string.split("(?<!(^|[A-Z]))(?=[A-Z])|(?<!^)(?=[A-Z][a-z])"));
-                                String[] parts = class_name.replace("..", ".").split("[.]|[-]|[_]");
+                                String[] parts = class_name.split("[.]|[-]|[_]");
                                 for (String part : parts) {
                                     if(qr.getInfo().getGroupId().contains(part) || qr.getInfo().getArtifactId().contains(part))
                                         occur++;

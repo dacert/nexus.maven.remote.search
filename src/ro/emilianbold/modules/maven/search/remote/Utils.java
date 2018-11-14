@@ -110,9 +110,8 @@ public class Utils {
     public static String encode(String s) {
 	try {
 	    return URLEncoder.encode(s, "UTF-8");
-	} catch (UnsupportedEncodingException ex) {
-	    //UTF-8 should always(?) be a supported encoding
-	    Logger.getLogger(NexusMavenGenericFindQuery.class.getName()).log(Level.SEVERE, null, ex);
+	} catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
 	    return "";
 	}
     }

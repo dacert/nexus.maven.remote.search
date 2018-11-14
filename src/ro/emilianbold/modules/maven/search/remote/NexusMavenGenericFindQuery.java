@@ -53,6 +53,7 @@
 package ro.emilianbold.modules.maven.search.remote;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
@@ -62,12 +63,13 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.prefs.Preferences;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import okhttp3.CacheControl;
+import okhttp3.Call;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -127,17 +129,17 @@ class NexusMavenGenericFindQuery implements GenericFindQuery {
         
         //See https://help.sonatype.com/repomanager3/rest-and-integration-api/search-api        
 	if (nameField != null) {
-            String mavenSearchURLText = String.format("%s/service/rest/v1/search?repository=%s&name.raw=%s", base, repo, Utils.encode(nameField.getValue()));
+            String mavenSearchURLText = String.format("%s/service/rest/v1/search?repository=%s&q=%s", base, repo, Utils.encode(nameField.getValue()));
 	    return queryCentralRepository(mavenSearchURLText, repo, null, pages);
 	} 
         
 	if (groupField != null || artifactField != null || versionField != null) {
 	    String mavenSearchURLText = String.format("%s/service/rest/v1/search?repository=%s", base, repo);
 	    if (groupField != null) {
-                mavenSearchURLText = String.format("%s&attributes.maven2.groupId=%s", mavenSearchURLText, Utils.encode(groupField.getValue()));
+                mavenSearchURLText = String.format("%s&group=%s", mavenSearchURLText, Utils.encode(groupField.getValue()));
 	    }
 	    if (artifactField != null) {
-                mavenSearchURLText = String.format("%s&attributes.maven2.artifactId=%s", mavenSearchURLText, Utils.encode(artifactField.getValue()));		
+                mavenSearchURLText = String.format("%s&name=%s", mavenSearchURLText, Utils.encode(artifactField.getValue()));		
 	    }
 	    if (versionField != null) {
 		mavenSearchURLText = String.format("%s&version=%s", mavenSearchURLText, Utils.encode(versionField.getValue()));
@@ -161,8 +163,8 @@ class NexusMavenGenericFindQuery implements GenericFindQuery {
                     if(result.getTotalResultCount() > 0 || cancel.get())
                         return result;
                 }                
-            } catch (MalformedURLException ex) {
-               Logger.getLogger(NexusMavenGenericFindQuery.class.getName()).log(Level.SEVERE, null, ex);
+            } catch (MalformedURLException e) {
+               e.printStackTrace();
             }
         }
         cancel.set(false);
@@ -176,7 +178,7 @@ class NexusMavenGenericFindQuery implements GenericFindQuery {
     })
     protected ResultImplementation<NBVersionInfo> queryCentralRepository(String mavenSearchURLText, String repo, String filterExtension, int pages) {       
         final AtomicBoolean partial = new AtomicBoolean(false);
-        final ProgressHandle ph = ProgressHandle.createHandle(Bundle.query_url(mavenSearchURLText), () -> {            
+        final ProgressHandle ph = ProgressHandle.createHandle(Bundle.query_url(mavenSearchURLText), () -> { 
             partial.set(true);
             cancel.set(true);      
             return true;
@@ -199,9 +201,7 @@ class NexusMavenGenericFindQuery implements GenericFindQuery {
                                         pages == -1 ? TimeUnit.DAYS : TimeUnit.MINUTES,
                                         ph.hashCode());
                 
-                Response okResponse = client.newCall(okRequest).execute();
-                
-                try (InputStream in = okResponse.body().byteStream()) {
+                try ( Response okResponse = client.newCall(okRequest).execute(); InputStream in = okResponse.body().byteStream()) {
                     ph.progress(Bundle.query_parsing());
                     Object parse = JSONValue.parse(new BufferedReader(new InputStreamReader(in)));
                     if (!(parse instanceof JSONObject)) {
@@ -228,10 +228,18 @@ class NexusMavenGenericFindQuery implements GenericFindQuery {
                     if (paginationObj instanceof String) {                        
                         continuationToken = paginationObj.toString().isEmpty() ? null : paginationObj.toString();
                     }else 
-                        continuationToken = null;
+                        continuationToken = null;     
+                    
+                }catch (Exception e) {
+                    if(!infos.isEmpty())
+                        partial.set(true); 
+                    break;
                 }
-            } catch (Exception ex) {
-                Logger.getLogger(NexusMavenGenericFindQuery.class.getName()).log(Level.SEVERE, null, ex);                
+                
+            } catch (Exception e) {
+                if(!infos.isEmpty())
+                    partial.set(true); 
+                break;
             }finally{
                 loop = loop == -1 ? -1 : loop-1;
             }
